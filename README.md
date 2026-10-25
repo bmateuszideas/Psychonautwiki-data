@@ -1,66 +1,81 @@
 # Psychonautwiki-data
 
-A complete, versioned mirror of the article content of
-[PsychonautWiki](https://psychonautwiki.org) — the open, community-run
-encyclopaedia of psychoactive substances, their effects, doses, durations,
-tolerance, and harm-reduction information.
+**Kompletna, ustrukturyzowana kopia całej wiedzy z [PsychonautWiki](https://psychonautwiki.org)** — naukowej, otwartej encyklopedii substancji psychoaktywnych (dawki, efekty, czas trwania, tolerancja, klasy chemiczne, harm reduction).
 
-This repository exists to provide a **100%-coverage, machine-readable snapshot**
-of the wiki that can be cloned, indexed, diffed, and used offline for research,
-ASR/NER datasets, and harm-reduction tooling — without scraping HTML.
+> **Status repo:** w budowie — postęp realizacji w [`TODO.md`](TODO.md).
+> Gdy TODO.md będzie w całości odhaczone, to repozytorium zawiera **100% treści artykułowej PsychonautWiki** w formacie bezpośrednio czytelnym dla agentów AI.
 
-## What is stored here
+## Dlaczego istnieje to repo
 
-| Directory | Contents |
-|---|---|
-| `dump/` | Raw MediaWiki XML dumps (`Special:Export`, `export-0.11`), batched and gzipped — the authoritative, lossless source |
-| `pages/<namespace>/` | One page per file: `.wikitext` (raw source) and `.md` (rendered markdown) |
-| `data/` | Structured data from the official [GraphQL API](https://api.psychonautwiki.org): substances, RoAs, doses, durations, effects, tolerance, reagents |
-| `index/` | `pages.json` (title, namespace, timestamp, checksum), `substances.json`, `effects.json` |
-| `meta/` | Dump timestamp, sitemap snapshot, per-run statistics |
+PsychonautWiki to jedyna w swoim rodzaju, uporządkowana baza wiedzy o substancjach psychoaktywnych, ale istnieje tylko jako strona WWW. Celem tego repo jest dostarczenie jej treści jako **datasetu**: plików, które można sklonować, indeksować, przeszukiwać pełnotekstowo i podać agentowi AI jako źródło wiedzy — bez scrapowania HTML, bez parsowania strony przy każdym pytaniu.
 
-Every page in the wiki's article namespace is captured with its **full raw
-wikitext** (lossless) plus a markdown rendering for readability.
+## Co dokładnie znajduje się w repo (docelowa struktura)
 
-## Source and how the dump is taken
+```
+Psychonautwiki-data/
+├── README.md                  # ten plik
+├── TODO.md                    # workflow + postęp prac
+├── LICENSE                    # licencja na kod narzędzi
+├── dump/                      # autorytatywny zapis: surowe XML (MediaWiki export-0.11, gz)
+│   └── batch-NNN.xml.gz
+├── pages/                     # 1 plik na stronę (wikitext + markdown)
+│   └── ns0/
+│       ├── LSD.wikitext       # surowy źródłowy wikitext (lossless)
+│       └── LSD.md             # markdown wyrenderowany do czytania przez AI
+├── data/                      # dane strukturalne z GraphQL API
+│   ├── substances.json        # wszystkie substancje: dawki, ROA, czas trwania, tolerancja, klasy
+│   ├── effects.json           # wszystkie efekty subiektywne
+│   └── reagents.json          # testy odczynnikowe + wyniki
+├── index/
+│   ├── pages.json             # spis stron: tytuł, ns, url źródłowy, timestamp rewizji, sha256
+│   ├── substances.json        # spis substancji -> pliki
+│   └── effects.json           # spis efektów -> pliki
+└── meta/
+    ├── sitemap.json           # snapshot oficjalnej sitemapy (pełna lista stron)
+    └── run.json                # data dumpa, liczby, checksumy, wersja pipeline'u
+```
 
-- **Page list**: the wiki's official MediaWiki sitemap index
-  (`/sitemap/sitemap-index-mediawiki-pw_.xml`, announced in `robots.txt`)
-  is the authoritative enumeration of all pages. It avoids the
-  Cloudflare/anti-bot protection (HTTP 418) that blocks the `list=allpages`
-  API module.
-- **Page content**: fetched in batches (50–100 pages per request) via
-  `Special:Export` with `curonly=1`, which returns standard MediaWiki XML
-  (`export-0.11`) including full wikitext — no HTML scraping involved.
-- **Structured data**: the public GraphQL API at `api.psychonautwiki.org`
-  (~373 substances with doses, durations, effects, classes, tolerance).
+### Jak ma tego używać agent AI
 
-Fetching is deliberately slow and batched (a small number of requests per
-run), to be a good citizen of the wiki's infrastructure.
+- **Odpowiedź na pytanie o substancję**: wczytać `pages/ns0/<Substancja>.md` (opis, dawkowanie, efekty) + rekord z `data/substances.json` (strukturalne dawki/czasy).
+- **Pytanie o efekt**: `pages/ns0/<Efekt>.md` + `index/effects.json`.
+- **Wyliczenie/lista** (np. "wszystkie lysergamidy"): filtrować `data/substances.json` (klasy psychoaktywne i chemiczne są tam jawne).
+- **Pełnotekstowe szukanie**: `index/pages.json` + grep po `pages/`.
+- **Weryfikacja świeżości**: `meta/run.json`.
+- Zasada źródła prawdy: jeśli markdown i wikitext się różnią, **wikitext (`*.wikitext`) i `dump/` są autorytatywne**; `.md` to warstwa wygody wygenerowana z wikitextu.
 
-Tooling for the full pipeline lives in
-[pypsychonaut](https://github.com/bmateuszideas/pypsychonaut) (transport with
-Cloudflare bypass, GraphQL client, markdown corpus dumper). See `PLAN.md` for
-the build pipeline and current progress.
+## Skąd i jak pobierane są dane (metodologia)
 
-## License and attribution
+| Warstwa danych | Źródło | Metoda |
+|---|---|---|
+| Lista wszystkich stron | oficjalna sitemapa MediaWiki (`/sitemap/sitemap-index-mediawiki-pw_.xml`, wpis w `robots.txt`) | pobranie indeksu + plików namespace, wyparsowanie URL-i (NS_0 = ~4124 strony) |
+| Pełna treść stron | `Special:Export` (POST, `curonly=1`) | batche po 50 tytułów → standardowy XML MediaWiki `export-0.11` z pełnym wikitextem; **bez scrapowania HTML** |
+| Dane strukturalne | publiczne GraphQL API `api.psychonautwiki.org` | stronowanie po wszystkich substancjach (~373): dawki, ROA, czas trwania, tolerancja, klasy, efekty, reageny |
 
-All wiki content in this repository originates from
-**PsychonautWiki** and is licensed by its authors under the
-**Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)**
-license, as stated on every page of the wiki.
+Pobieranie jest batchowane i wolne (cała treść NS_0 ≈ 85 żądań z przerwami) — pełen szacunek dla infrastruktury wiki. Endpoint `list=allpages` API jest zablokowany anti-botem (HTTP 418), dlatego sitemapa jest jedynym wiarygodnym wyliczeniem stron.
 
-Redistribution of this data must:
+## Zależności i powiązane repozytoria
 
-1. credit PsychonautWiki and link to `https://psychonautwiki.org`;
-2. state the license (CC BY-SA 4.0) and link to it;
-3. be released under the same (or compatible) license.
+| Narzędzie | Repo | Do czego służy |
+|---|---|---|
+| `pypsychonaut` | [bmateuszideas/pypsychonaut](https://github.com/bmateuszideas/pypsychonaut) | transport z obejściem Cloudflare (curl_cffi/FlareSolverr), klient GraphQL, dumper markdown — z niego pochodzi główna logika pipeline'u |
+| `wiki-scripts` | [bmateuszideas/wiki-scripts](https://github.com/bmateuszideas/wiki-scripts) | punkt odniesienia: `wiki_dump_downloader` robi ten sam dump przez `Special:Export` |
+| `wikitextparser` | PyPI | parsowanie i konwersja wikitext → markdown |
+| `python-frontmatter`, `pypandoc` | PyPI | render markdown i frontmatter z metadanymi strony |
 
-Code and tooling in this repository are licensed separately by the repository
-owner (see `LICENSE` for scripts if added).
+Dokładny przebieg pracy: [`TODO.md`](TODO.md).
 
-## Refreshing the dump
+## Licencja i atrybucja
 
-The dump is refreshable at any time by re-running the pipeline (see
-`PLAN.md`). Each run records its timestamp and the sitemap `lastmod` dates in
-`meta/`, so the age of the snapshot is always explicit.
+Cała treść wiki pochodzi z **PsychonautWiki** i jest objęta licencją **Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)**, jak podano w stopce każdej strony wiki.
+
+Warunki redystrybucji tej treści:
+1. atrybucja PsychonautWiki + link do `https://psychonautwiki.org` (każdy rekord w `index/pages.json` zawiera `source_url` strony),
+2. wskazanie licencji CC BY-SA 4.0 z linkiem,
+3. dalsze udostępnianie na tej samej (lub zgodnej) licencji.
+
+Kod narzędzi w tym repo jest licencjonowany odrębnie przez właściciela repo (`LICENSE`).
+
+## Odświeżanie dumpa
+
+Dump można odświeżyć w dowolnym momencie ponownym uruchomieniem pipeline'u (`TODO.md`, kroki 1–7). Każdy run zapisuje timestamp i `lastmod` sitemapy w `meta/run.json`, więc wiek snapshotu jest zawsze jawny. Sitemapa zawiera `lastmod` per namespace — przyszłe runy mogą pobierać tylko zmienione strony.
